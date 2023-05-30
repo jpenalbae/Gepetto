@@ -65,6 +65,30 @@ class ExplainHandler(idaapi.action_handler_t):
 
 # -----------------------------------------------------------------------------
 
+def get_lvar(ea, name):
+    """
+    Get the lvar_t object for the given function and variable name.
+    :param ea: The address of the function
+    :param name: The name of the variable
+    :return: The lvar_t object for the variable, or None if it could not be found
+    """
+    # Get the function object
+    func = ida_hexrays.decompile(idaapi.get_func(ea))
+
+    # Get the list of local variables for the function
+    lvars = func.get_lvars()
+
+    # Find the lvar_t object for the variable name
+    var_lvar = None
+    for lvar in lvars:
+        if lvar.name == name:
+            var_lvar = lvar
+            break
+
+    return var_lvar
+
+# -----------------------------------------------------------------------------
+
 def rename_callback(address, view, response, retries=0):
     """
     Callback that extracts a JSON array of old names and new names from the
@@ -110,8 +134,13 @@ def rename_callback(address, view, response, retries=0):
 
     replaced = []
     for n in names:
-        if ida_hexrays.rename_lvar(function_addr, n, names[n]):
-            replaced.append(n)
+        if idaapi.IDA_SDK_VERSION >= 760:
+            if ida_hexrays.rename_lvar(function_addr, n, names[n]):
+                replaced.append(n)
+        else:
+            if lvar := get_lvar(address, n):
+                if view.rename_lvar(lvar, names[n], True):
+                    replaced.append(n)
 
     # Update possible names left in the function comment
     comment = idc.get_func_cmt(address, 0)
